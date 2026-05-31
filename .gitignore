@@ -1,0 +1,12 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+build/
+dist/
+*.egg-info/
+/cleanconfig
+*.test
+coverage.out
+.gocache/
