@@ -263,11 +263,21 @@ func splitValueComment(valueText string) (string, string) {
 func renderLines(lines []parsedLine, opts Options) []renderedLine {
 	rendered := make([]renderedLine, 0, len(lines))
 	preSectionLevels := findPreSectionLevels(lines)
+	previousBlank := false
+
+	appendRendered := func(line renderedLine) {
+		rendered = append(rendered, line)
+		previousBlank = false
+	}
 
 	for index, line := range lines {
 		switch {
 		case line.kind == "blank":
+			if len(rendered) == 0 || previousBlank {
+				continue
+			}
 			rendered = append(rendered, renderedLine{})
+			previousBlank = true
 
 		case line.kind == "section":
 			indent := indent(line.sectionLevel-1, opts)
@@ -275,23 +285,26 @@ func renderLines(lines []parsedLine, opts Options) []renderedLine {
 			if line.sectionComment != "" {
 				body += "  " + line.sectionComment
 			}
-			rendered = append(rendered, renderedLine{text: body})
+			appendRendered(renderedLine{text: body})
 
 		case line.kind == "assignment" && line.assignment != nil:
 			indent := indent(line.level, opts)
 			body := formatAssignment(*line.assignment, opts)
-			rendered = append(rendered, renderedLine{text: indent + body, assignment: line.assignment})
+			appendRendered(renderedLine{text: indent + body, assignment: line.assignment})
 
 		case line.kind == "multiline":
-			rendered = append(rendered, renderedLine{text: trimRightSpace(line.text)})
+			appendRendered(renderedLine{text: trimRightSpace(line.text)})
 
 		default:
 			level, ok := preSectionLevels[index]
 			if !ok {
 				level = line.level
 			}
-			rendered = append(rendered, renderedLine{text: indent(level, opts) + strings.TrimSpace(line.text)})
+			appendRendered(renderedLine{text: indent(level, opts) + strings.TrimSpace(line.text)})
 		}
+	}
+	if previousBlank {
+		rendered = rendered[:len(rendered)-1]
 	}
 
 	return rendered

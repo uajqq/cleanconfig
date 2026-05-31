@@ -129,6 +129,60 @@ func TestIdempotent(t *testing.T) {
 	}
 }
 
+func TestCollapsesRedundantBlankLines(t *testing.T) {
+	source := `
+
+[Station]
+location = home
+
+
+altitude = 0, foot
+
+
+
+[StdRESTful]
+[[AWEKAS]]
+enable=false
+
+
+`
+	expected := `[Station]
+    location = home
+
+    altitude = 0, foot
+
+[StdRESTful]
+    [[AWEKAS]]
+        enable = false
+`
+	assertFormatted(t, source, DefaultOptions(), expected)
+}
+
+func TestPreservesBlankLinesInsideMultilineValues(t *testing.T) {
+	source := `[Station]
+message = """
+first
+
+
+second
+"""
+
+
+location = home
+`
+	expected := `[Station]
+    message = """
+first
+
+
+second
+"""
+
+    location = home
+`
+	assertFormatted(t, source, DefaultOptions(), expected)
+}
+
 func TestEmptyInputStaysEmpty(t *testing.T) {
 	assertFormatted(t, "", DefaultOptions(), "")
 }

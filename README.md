@@ -7,7 +7,8 @@ It is ConfigObj-aware:
   ConfigObj section markers
 - assignments, quoted keys, quoted values, lists, and inline `#` comments are
   split only when the delimiter is outside quotes
-- comments and blank lines are preserved
+- comments and blank-line separators are preserved, with redundant blank lines
+  collapsed
 - multiline quoted values are preserved instead of rewritten
 
 ## Build
