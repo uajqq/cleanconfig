@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 var sectionPattern = regexp.MustCompile(`^(\[+)\s*(.*?)\s*(\]+)(\s*(?:#.*)?)$`)
@@ -77,8 +78,10 @@ type parsedLine struct {
 }
 
 type renderedLine struct {
-	text       string
-	assignment *assignment
+	text         string
+	kind         string
+	sectionLevel int
+	assignment   *assignment
 }
 
 func FormatConfig(text string, opts Options) (string, error) {
@@ -120,6 +123,22 @@ func parseLines(text string) []parsedLine {
 			if containsUnescaped(body, multilineQuote) {
 				inMultiline = false
 				multilineQuote = ""
+			}
+			continue
+		}
+
+		if sections, ok := splitAdjacentSectionBodies(body); ok {
+			for _, section := range sections {
+				sectionLevel, name, comment, _ := parseSection(strings.TrimSpace(section))
+				lines = append(lines, parsedLine{
+					kind:           "section",
+					text:           section,
+					level:          currentLevel,
+					sectionLevel:   sectionLevel,
+					sectionName:    name,
+					sectionComment: comment,
+				})
+				currentLevel = sectionLevel
 			}
 			continue
 		}
@@ -183,6 +202,76 @@ func splitBodies(text string) []string {
 		lines = lines[:len(lines)-1]
 	}
 	return lines
+}
+
+func splitAdjacentSectionBodies(body string) ([]string, bool) {
+	stripped := strings.TrimSpace(body)
+	if stripped == "" || stripped[0] != '[' {
+		return nil, false
+	}
+
+	sections := []string{}
+	index := 0
+	for index < len(stripped) {
+		index = skipSpace(stripped, index)
+		if index >= len(stripped) {
+			break
+		}
+		if stripped[index] == '#' {
+			if len(sections) == 0 {
+				return nil, false
+			}
+			sections[len(sections)-1] += "  " + strings.TrimSpace(stripped[index:])
+			break
+		}
+		if stripped[index] != '[' {
+			return nil, false
+		}
+
+		start := index
+		openingStart := index
+		for index < len(stripped) && stripped[index] == '[' {
+			index++
+		}
+		level := index - openingStart
+
+		nameStart := index
+		for index < len(stripped) && stripped[index] != '[' && stripped[index] != ']' {
+			index++
+		}
+		if index >= len(stripped) || stripped[index] != ']' {
+			return nil, false
+		}
+		if strings.TrimSpace(stripped[nameStart:index]) == "" {
+			return nil, false
+		}
+
+		closingStart := index
+		for index < len(stripped) && stripped[index] == ']' {
+			index++
+		}
+		if index-closingStart != level {
+			return nil, false
+		}
+
+		sections = append(sections, strings.TrimSpace(stripped[start:index]))
+	}
+
+	if len(sections) < 2 {
+		return nil, false
+	}
+	return sections, true
+}
+
+func skipSpace(text string, index int) int {
+	for index < len(text) {
+		char, size := utf8.DecodeRuneInString(text[index:])
+		if !unicode.IsSpace(char) {
+			return index
+		}
+		index += size
+	}
+	return index
 }
 
 func parseSection(stripped string) (int, string, string, bool) {
@@ -285,7 +374,11 @@ func renderLines(lines []parsedLine, opts Options) []renderedLine {
 			if line.sectionComment != "" {
 				body += "  " + line.sectionComment
 			}
-			appendRendered(renderedLine{text: body})
+			if shouldSeparateAdjacentSection(rendered, previousBlank, line.sectionLevel) {
+				rendered = append(rendered, renderedLine{})
+				previousBlank = true
+			}
+			appendRendered(renderedLine{text: body, kind: "section", sectionLevel: line.sectionLevel})
 
 		case line.kind == "assignment" && line.assignment != nil:
 			indent := indent(line.level, opts)
@@ -308,6 +401,15 @@ func renderLines(lines []parsedLine, opts Options) []renderedLine {
 	}
 
 	return rendered
+}
+
+func shouldSeparateAdjacentSection(rendered []renderedLine, previousBlank bool, sectionLevel int) bool {
+	if previousBlank || len(rendered) == 0 {
+		return false
+	}
+
+	previous := rendered[len(rendered)-1]
+	return previous.kind == "section" && sectionLevel <= previous.sectionLevel
 }
 
 func findPreSectionLevels(lines []parsedLine) map[int]int {

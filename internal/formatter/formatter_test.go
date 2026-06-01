@@ -183,6 +183,44 @@ second
 	assertFormatted(t, source, DefaultOptions(), expected)
 }
 
+func TestSplitsAdjacentSectionHeadersOntoSeparateLines(t *testing.T) {
+	source := `[StdRESTful][[AWEKAS]]
+enable=false
+[Station] [[Nested]] # comment
+foo=bar
+`
+	expected := `[StdRESTful]
+    [[AWEKAS]]
+        enable = false
+[Station]
+    [[Nested]]  # comment
+        foo = bar
+`
+	assertFormatted(t, source, DefaultOptions(), expected)
+}
+
+func TestSeparatesAdjacentSiblingSectionHeaders(t *testing.T) {
+	source := `[test]
+[[banana]]
+[test2]
+[test3]
+[test4][test5][[test6]]
+`
+	expected := `[test]
+    [[banana]]
+
+[test2]
+
+[test3]
+
+[test4]
+
+[test5]
+    [[test6]]
+`
+	assertFormatted(t, source, DefaultOptions(), expected)
+}
+
 func TestEmptyInputStaysEmpty(t *testing.T) {
 	assertFormatted(t, "", DefaultOptions(), "")
 }
